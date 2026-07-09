@@ -1,7 +1,7 @@
 {
   "name": "linkedin-mcp",
   "version": "1.0.0",
-  "description": "Minimal MCP server for LinkedIn's official Posts API (v2 OIDC userinfo + rest/posts) - no scraping, no stealth browser.",
+  "description": "Minimal MCP server for LinkedIn's official OIDC + Posts API - no scraping",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -17,5 +17,16 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0"
-  }
+  },
+  "author": "Nathan Graves",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/N-Graves/linkedin-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "linkedin",
+    "model-context-protocol"
+  ]
 }
