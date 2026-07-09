@@ -3,6 +3,9 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { LinkedInClient } from "./linkedin-client.js";
+import { requireCapability } from "./agent-capability.js";
+
+const REQUIRED_CAPABILITY = "social"; // ECHO owns social posting
 
 const ACCESS_TOKEN = process.env.LINKEDIN_ACCESS_TOKEN;
 if (!ACCESS_TOKEN) {
@@ -22,14 +25,16 @@ const tools: Tool[] = [
     name: "linkedin_create_post",
     description:
       "Publish a real, immediately-live post to LinkedIn. There is no draft/undo - only call this after the " +
-      "content has already been approved through the fleet board's HITL review, never before.",
+      "content has already been approved through the fleet board's HITL review, never before. Requires " +
+      "agent_id (must hold the 'social' capability, e.g. echo).",
     inputSchema: {
       type: "object",
       properties: {
+        agent_id: { type: "string", description: "Your fleet-board agent id, e.g. 'echo'" },
         text: { type: "string", description: "The post text (LinkedIn's commentary field)" },
         visibility: { type: "string", enum: ["PUBLIC", "CONNECTIONS"], description: "Default PUBLIC" },
       },
-      required: ["text"],
+      required: ["agent_id", "text"],
     },
   },
 ];
@@ -47,6 +52,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       result = await client.getUserInfo();
       break;
     case "linkedin_create_post":
+      await requireCapability(args.agent_id as string | undefined, REQUIRED_CAPABILITY);
       result = await client.createPost({
         text: args.text as string,
         visibility: args.visibility as "PUBLIC" | "CONNECTIONS" | undefined,
