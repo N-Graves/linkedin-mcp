@@ -163,6 +163,30 @@ export class LinkedInClient {
     return init.value.image;
   }
 
+  /*
+   * There is deliberately NO comment tool here, and this is not an oversight.
+   *
+   * It matters because LinkedIn heavily suppresses reach on posts carrying an
+   * external URL in the body, so the product link is supposed to go in the
+   * first comment. We built the socialActions call and probed it live
+   * (2026-07-27), against a non-existent share URN so nothing was created:
+   *
+   *   POST /rest/socialActions/{urn}/comments
+   *     -> 403 ACCESS_DENIED "Not enough permissions to access:
+   *        partnerApiSocialActions.CREATE.20260601"
+   *   GET  /rest/socialActions/{urn}/comments
+   *     -> 403 ACCESS_DENIED "...partnerApiSocialActions.GET_ALL.20260601"
+   *
+   * Both directions are gated behind the LinkedIn Partner Program, NOT behind a
+   * scope we could add at re-auth - the token already holds w_member_social,
+   * which LinkedIn's own docs describe as covering comments. It does not, for a
+   * standard app.
+   *
+   * So on LinkedIn the follow-up comment is a manual step for Nathan. ECHO puts
+   * the exact comment text in its HITL note; see ECHO's AGENTS.md. Don't
+   * re-derive this - the probe above is the answer.
+   */
+
   /** Deletes one of our own posts. Irreversible. */
   async deletePost(postUrn: string): Promise<{ deleted: boolean }> {
     const res = await fetch(`${BASE_URL}/rest/posts/${encodeURIComponent(postUrn)}`, {
