@@ -3,9 +3,11 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { LinkedInClient } from "./linkedin-client.js";
-import { requireCapability } from "./agent-capability.js";
+import { requireCapability, CapabilityError } from "./agent-capability.js";
+import { requireBrand, BrandError } from "./brand-gate.js";
 
 const REQUIRED_CAPABILITY = "social"; // ECHO owns social posting
+const SERVER_BRAND = "nas_digital"; // LinkedIn is the technical brand's channel
 
 const ACCESS_TOKEN = process.env.LINKEDIN_ACCESS_TOKEN;
 if (!ACCESS_TOKEN) {
@@ -31,6 +33,13 @@ const tools: Tool[] = [
       type: "object",
       properties: {
         agent_id: { type: "string", description: "Your fleet-board agent id, e.g. 'echo'" },
+        task_id: {
+          type: "string",
+          description:
+            "The board task this post belongs to. LinkedIn is a NAS DIGITAL channel - the " +
+            "task's brand must be nas_digital, or the post is refused. With Nate work goes " +
+            "to Instagram/Facebook/Threads/Pinterest/TikTok instead.",
+        },
         text: { type: "string", description: "The post text (LinkedIn's commentary field)" },
         visibility: { type: "string", enum: ["PUBLIC", "CONNECTIONS"], description: "Default PUBLIC" },
         image_path: {
@@ -44,7 +53,7 @@ const tools: Tool[] = [
           description: "Alt text for the attached image - include it, for accessibility and reach.",
         },
       },
-      required: ["agent_id", "text"],
+      required: ["agent_id", "task_id", "text"],
     },
   },
   {
@@ -92,12 +101,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args = {} } = request.params;
   let result: unknown;
 
-  switch (name) {
+  try {
+    switch (name) {
     case "linkedin_get_profile":
       result = await client.getUserInfo();
       break;
     case "linkedin_create_post":
       await requireCapability(args.agent_id as string | undefined, REQUIRED_CAPABILITY);
+      // LinkedIn is NAS Digital's channel. Gated on the publishing call only:
+      // uploading an image commits nothing publicly, and deleting a post is
+      // always allowed (removing something is never the harmful direction).
+      await requireBrand(args.task_id as string | undefined, SERVER_BRAND);
       result = await client.createPost({
         text: args.text as string,
         visibility: args.visibility as "PUBLIC" | "CONNECTIONS" | undefined,
@@ -115,6 +129,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       break;
     default:
       throw new Error(`Unknown tool: ${name}`);
+    }
+  } catch (err) {
+    // A gate rejection is a real answer to the caller, not a crash. Thrown, it
+    // surfaced as an opaque transport error and the agent could not tell a
+    // wrong-brand refusal from LinkedIn being down - so it retried. Returned as
+    // isError, the reason is readable and actionable.
+    if (err instanceof BrandError || err instanceof CapabilityError) {
+      return { content: [{ type: "text", text: err.message }], isError: true };
+    }
+    throw err;
   }
 
   return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
